@@ -9,6 +9,9 @@ app.use(cors());
 app.use(express.json());
 
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/PGxDatabase');
+mongoose.connect(process.env.MONGODB_URI)
+  .then(() => console.log("MongoDB Atlas connected"))
+  .catch(err => console.error("MongoDB connection error:", err));
 
 const minorityInfoSchema = new mongoose.Schema({
   Drug: String,
