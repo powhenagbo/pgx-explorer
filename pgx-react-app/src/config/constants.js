@@ -1,7 +1,7 @@
 // src/config/constants.js
 
 // The backend API URL 
-export const API_BASE_URL = 'http://localhost:5001/api';
+export const API_BASE_URL = process.env.REACT_APP_API_URL + "/api";
 
 // Table display settings
 export const ROWS_PER_PAGE = 25;
