@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import KetcherEditor from "./KetcherEditor";
 
-const API_BASE = "http://localhost:5001/api";
+const API_BASE = process.env.REACT_APP_API_URL + "/api";
 const FDA_PGX_LABELING_URL =
   "https://www.fda.gov/drugs/science-and-research-drugs/table-pharmacogenomic-biomarkers-drug-labeling";
 
