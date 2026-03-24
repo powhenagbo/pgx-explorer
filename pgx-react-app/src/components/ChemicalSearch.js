@@ -5,6 +5,7 @@ const API_BASE = process.env.REACT_APP_API_URL + "/api";
 const FDA_PGX_LABELING_URL =
   "https://www.fda.gov/drugs/science-and-research-drugs/table-pharmacogenomic-biomarkers-drug-labeling";
 
+// Renders a compact external-link icon used beside linked values.
 function LinkIcon() {
   return (
     <svg
@@ -26,6 +27,7 @@ function LinkIcon() {
   );
 }
 
+// Renders the expandable chevron used in dropdown and hover triggers.
 function ChevronIcon({ open = false }) {
   return (
     <svg
@@ -51,6 +53,7 @@ function ChevronIcon({ open = false }) {
   );
 }
 
+// Displays a single summary metric tile in the page header stats.
 function InfoTile({ label, value }) {
   return (
     <div
@@ -69,6 +72,7 @@ function InfoTile({ label, value }) {
   );
 }
 
+// Shows a labeled field card, optionally turning the value into an external link.
 function FieldCard({ label, value, href }) {
   return (
     <div style={{ background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: 12, padding: 12 }}>
@@ -92,6 +96,7 @@ function FieldCard({ label, value, href }) {
   );
 }
 
+// Renders the shared button styles used across the search panel and editor actions.
 function ToolbarButton({ children, onClick, primary = false }) {
   return (
     <button
@@ -111,14 +116,18 @@ function ToolbarButton({ children, onClick, primary = false }) {
   );
 }
 
+// Builds the external GeneCards search URL for a biomarker value.
 const getGeneCardsLink = (biomarker) =>
   `https://www.genecards.org/Search/Keyword?queryString=${encodeURIComponent(biomarker)}`;
 
+// Builds the external dbSNP URL for a SNP identifier.
 const getDbSnpLink = (snp) => `https://www.ncbi.nlm.nih.gov/snp/${encodeURIComponent(snp)}`;
 
+// Builds the FDA pharmacogenomic labeling page link for a drug value.
 const buildDrugFdaLink = (drug) =>
   `${FDA_PGX_LABELING_URL}#:~:text=${encodeURIComponent(drug)}`;
 
+// Coordinates chemical search, result selection, and editor loading for minority-info records.
 export default function ChemicalDatabaseBuilderApp() {
   const [rows, setRows] = useState([]);
   const [query, setQuery] = useState("");
@@ -140,6 +149,7 @@ export default function ChemicalDatabaseBuilderApp() {
     fetchRows();
   }, []);
 
+  // Loads the minority-info dataset that powers the chemical search workspace.
   const fetchRows = async () => {
     try {
       setLoading(true);
@@ -156,6 +166,7 @@ export default function ChemicalDatabaseBuilderApp() {
     }
   };
 
+  // Retrieves the structure for a selected drug so it can be loaded into the editor.
   const fetchStructure = async (row) => {
     if (!row?.Drug) return row?.smiles || "";
 
@@ -172,12 +183,14 @@ export default function ChemicalDatabaseBuilderApp() {
     }
   };
 
+  // Marks a result as selected and synchronizes its structure into the editor state.
   const handleSelectRow = async (row) => {
     setSelectedRow(row);
     const smiles = await fetchStructure(row);
     setEditorSmiles(smiles);
   };
 
+  // Opens the right-side detail drawer and selects the same record for the sidebar/editor.
   const openDetails = async (row) => {
     setDetailRow(row);
     await handleSelectRow(row);
@@ -187,6 +200,7 @@ export default function ChemicalDatabaseBuilderApp() {
   const normalizedSubmittedQuery = submittedQuery.trim().toLowerCase();
   const hasActiveSearch = normalizedSubmittedQuery.length > 0;
 
+  // Groups raw dataset rows into unique drug/biomarker result records with SNP metadata.
   const groupedRows = useMemo(() => {
     const grouped = new Map();
 
@@ -235,6 +249,7 @@ export default function ChemicalDatabaseBuilderApp() {
       .sort((a, b) => a.Drug.localeCompare(b.Drug));
   }, [rows]);
 
+  // Filters grouped result rows using the submitted search term shown in the results table.
   const filteredRows = useMemo(() => {
     if (!hasActiveSearch) return [];
 
@@ -245,6 +260,7 @@ export default function ChemicalDatabaseBuilderApp() {
     });
   }, [groupedRows, hasActiveSearch, normalizedSubmittedQuery]);
 
+  // Builds a unique list of drugs for summary counts and search suggestions.
   const drugOptions = useMemo(() => {
     const uniqueDrugs = new Map();
 
@@ -261,23 +277,48 @@ export default function ChemicalDatabaseBuilderApp() {
     return Array.from(uniqueDrugs.values()).sort((a, b) => a.localeCompare(b));
   }, [groupedRows]);
 
-  const filteredDrugOptions = useMemo(() => {
+  // Creates mixed search suggestions that let users pick either a drug or a biomarker term.
+  const filteredSearchOptions = useMemo(() => {
     if (!showDrugSuggestions) return [];
-    if (!normalizedQuery) return drugOptions;
+    const matchedPairs = new Map();
 
-    return drugOptions.filter((drug) => drug.toLowerCase().includes(normalizedQuery));
-  }, [drugOptions, normalizedQuery, showDrugSuggestions]);
+    groupedRows.forEach((row) => {
+      const drug = String(row.Drug || "").trim();
+      const biomarker = String(row.Biomarker || "").trim();
+      const snpText = row.SNPEntries.map((entry) => `${entry.SNP} ${entry.Chr} ${entry.Pos}`).join(" ");
+      const searchableText = `${drug} ${biomarker} ${snpText}`.toLowerCase();
 
+      if (!normalizedQuery || searchableText.includes(normalizedQuery)) {
+        const key = `${drug.toLowerCase()}|${biomarker.toLowerCase()}`;
+        if (!matchedPairs.has(key)) {
+          matchedPairs.set(key, {
+            drug: drug || "-",
+            biomarker: biomarker || "-",
+          });
+        }
+      }
+    });
+
+    return Array.from(matchedPairs.values()).sort((a, b) => {
+      const drugCompare = a.drug.localeCompare(b.drug);
+      if (drugCompare !== 0) return drugCompare;
+      return a.biomarker.localeCompare(b.biomarker);
+    });
+  }, [groupedRows, normalizedQuery, showDrugSuggestions]);
+
+  // Copies the current SMILES text to the clipboard for reuse elsewhere.
   const copySmiles = async () => {
     if (!editorSmiles) return;
     await navigator.clipboard.writeText(editorSmiles);
   };
 
+  // Inserts a chosen suggestion value into the search box and closes the dropdown.
   const handleSuggestionSelect = (drug) => {
     setQuery(drug);
     setShowDrugSuggestions(false);
   };
 
+  // Positions and opens the biomarker hover card beside the hovered table cell.
   const openBiomarkerCard = (rowId, element) => {
     if (!element) return;
 
@@ -294,6 +335,7 @@ export default function ChemicalDatabaseBuilderApp() {
     setOpenBiomarkerCardId(rowId);
   };
 
+  // Delays hover-card closing slightly so users can move into the card without losing it.
   const scheduleBiomarkerCardClose = (rowId) => {
     if (biomarkerCardCloseTimerRef.current) {
       window.clearTimeout(biomarkerCardCloseTimerRef.current);
@@ -305,6 +347,7 @@ export default function ChemicalDatabaseBuilderApp() {
     }, 220);
   };
 
+  // Cancels any pending hover-card close when the user is still interacting with it.
   const cancelBiomarkerCardClose = () => {
     if (biomarkerCardCloseTimerRef.current) {
       window.clearTimeout(biomarkerCardCloseTimerRef.current);
@@ -312,6 +355,7 @@ export default function ChemicalDatabaseBuilderApp() {
     }
   };
 
+  // Commits the current input as the active search term and shows loading feedback briefly.
   const runSearch = () => {
     setShowDrugSuggestions(false);
     setSearchLoading(true);
@@ -321,6 +365,7 @@ export default function ChemicalDatabaseBuilderApp() {
     }, 200);
   };
 
+  // Resets the search UI, selection state, and hover-card state back to defaults.
   const clearSearch = () => {
     setQuery("");
     setSubmittedQuery("");
@@ -368,7 +413,7 @@ export default function ChemicalDatabaseBuilderApp() {
                     onBlur={() => {
                       window.setTimeout(() => setShowDrugSuggestions(false), 120);
                     }}
-                    placeholder="Search by drug, SNP, biomarker, chromosome"
+                    placeholder="Search by drug or biomarker"
                     style={{ width: "100%", padding: 12, borderRadius: 12, border: "1px solid #cbd5e1" }}
                   />
 
@@ -388,31 +433,58 @@ export default function ChemicalDatabaseBuilderApp() {
                         zIndex: 5,
                       }}
                     >
-                      {filteredDrugOptions.length > 0 ? (
-                        filteredDrugOptions.map((drug, index) => (
-                          <button
-                            key={drug}
-                            type="button"
-                            onMouseDown={(event) => event.preventDefault()}
-                            onClick={() => handleSuggestionSelect(drug)}
+                      {filteredSearchOptions.length > 0 ? (
+                        filteredSearchOptions.map((suggestion, index) => (
+                          <div
+                            key={`${suggestion.drug}-${suggestion.biomarker}-${index}`}
                             style={{
-                              width: "100%",
                               padding: "12px 14px",
-                              border: "none",
-                              borderBottom: index === filteredDrugOptions.length - 1 ? "none" : "1px solid #e5e7eb",
+                              borderBottom: index === filteredSearchOptions.length - 1 ? "none" : "1px solid #e5e7eb",
                               background: "white",
-                              textAlign: "left",
-                              cursor: "pointer",
-                              color: "#0f172a",
-                              fontWeight: 600,
                             }}
                           >
-                            {drug}
-                          </button>
+                            <div style={{ display: "grid", gap: 8 }}>
+                              <button
+                                type="button"
+                                onMouseDown={(event) => event.preventDefault()}
+                                onClick={() => handleSuggestionSelect(suggestion.drug)}
+                                style={{
+                                  width: "100%",
+                                  border: "none",
+                                  background: "white",
+                                  textAlign: "left",
+                                  cursor: "pointer",
+                                  color: "#0f172a",
+                                  fontWeight: 700,
+                                  padding: 0,
+                                }}
+                              >
+                                Drug: {suggestion.drug}
+                              </button>
+                              <button
+                                type="button"
+                                onMouseDown={(event) => event.preventDefault()}
+                                onClick={() => handleSuggestionSelect(suggestion.biomarker)}
+                                style={{
+                                  width: "100%",
+                                  border: "none",
+                                  background: "white",
+                                  textAlign: "left",
+                                  cursor: "pointer",
+                                  color: "#64748b",
+                                  fontWeight: 600,
+                                  padding: 0,
+                                  fontSize: 13,
+                                }}
+                              >
+                                Biomarker: {suggestion.biomarker}
+                              </button>
+                            </div>
+                          </div>
                         ))
                       ) : (
                         <div style={{ padding: 14, color: "#64748b", fontSize: 14 }}>
-                          No drugs match the current search.
+                          No matching drugs or biomarkers found for the current search.
                         </div>
                       )}
                     </div>
@@ -596,14 +668,21 @@ export default function ChemicalDatabaseBuilderApp() {
                         return (
                           <tr
                             key={row.id}
-                            style={{ background: selectedRow?.id === row.id ? "#eff6ff" : "white" }}
+                            onClick={() => handleSelectRow(row)}
+                            style={{
+                              background: selectedRow?.id === row.id ? "#eff6ff" : "white",
+                              cursor: "pointer",
+                            }}
                           >
                             <td style={{ padding: 14, borderBottom: "1px solid #e5e7eb", color: "#334155", fontWeight: 700 }}>
                               <a
                                 href={buildDrugFdaLink(row.Drug)}
                                 target="_blank"
                                 rel="noreferrer"
-                                onClick={() => handleSelectRow(row)}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  handleSelectRow(row);
+                                }}
                                 style={{ color: "#1d4ed8", textDecoration: "none" }}
                               >
                                 {row.Drug}
@@ -618,6 +697,7 @@ export default function ChemicalDatabaseBuilderApp() {
                               <button
                                 type="button"
                                 onClick={(event) => {
+                                  event.stopPropagation();
                                   if (isBiomarkerCardOpen) {
                                     cancelBiomarkerCardClose();
                                     setOpenBiomarkerCardId(null);
@@ -669,7 +749,10 @@ export default function ChemicalDatabaseBuilderApp() {
                                       href={getGeneCardsLink(row.Biomarker)}
                                       target="_blank"
                                       rel="noreferrer"
-                                      onClick={() => handleSelectRow(row)}
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        handleSelectRow(row);
+                                      }}
                                       style={{ color: "#1d4ed8", textDecoration: "none", fontWeight: 700 }}
                                     >
                                       {row.Biomarker}
@@ -684,7 +767,10 @@ export default function ChemicalDatabaseBuilderApp() {
                                           href={getDbSnpLink(entry.SNP)}
                                           target="_blank"
                                           rel="noreferrer"
-                                          onClick={() => handleSelectRow(row)}
+                                          onClick={(event) => {
+                                            event.stopPropagation();
+                                            handleSelectRow(row);
+                                          }}
                                           style={{ color: "#0f172a", textDecoration: "none", fontSize: 14 }}
                                         >
                                           {entry.SNP}
@@ -701,7 +787,10 @@ export default function ChemicalDatabaseBuilderApp() {
                             <td style={{ padding: 14, borderBottom: "1px solid #e5e7eb" }}>
                               <button
                                 type="button"
-                                onClick={() => openDetails(row)}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  openDetails(row);
+                                }}
                                 style={{
                                   border: "1px solid #cbd5e1",
                                   background: "white",
